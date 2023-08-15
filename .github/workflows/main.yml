@@ -45,11 +45,10 @@ jobs:
         with:
           name: release-aab
           path: build/app/outputs/apk/release/app-release.apk
-          
+      
       - name: Upload PGYER File
-        id: pgyer
-        uses: xtayga/upload-pgyer-action@master
+        uses: PGYER/pgyer-upload-app-action@v1.3
         with:
-          url: https://www.pgyer.com/apiv2/app/upload
-          forms: '{"_api_key":"${{ secrets.pgyer_key }}","buildName":"Translate"}'
-          fileForms: '{"file":"build/app/outputs/apk/release/app-release.apk"}'
+          _api_key: ${{ secrets.PGYER_KEY }}
+          appFilePath: /build/app/outputs/apk/release/app-release.apk
+
