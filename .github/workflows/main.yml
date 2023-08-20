@@ -33,6 +33,7 @@ jobs:
           ls -all
           echo $KEYSTORE_BASE64 | base64 -di > android/app/keystore.jks
           echo $KEY_PROPERTIES | base64 -di > android/key.properties
+          echo $BAIDU_KEY_BASE64 | base64 -di > assets/conf.json
 
       - name: Restore packages
         run: flutter pub get

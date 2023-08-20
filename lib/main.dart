@@ -1,4 +1,10 @@
+//import 'dart:ffi';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 void main() {
   runApp(const MyApp());
@@ -38,19 +44,141 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+//翻译结果
+class TransResult {
+  String from;
+  String to;
+  List<Translation> translations;
+  String error_msg;
 
-  void _incrementCounter() {
+  TransResult(
+      {required this.from,
+      required this.to,
+      required this.translations,
+      required this.error_msg});
+
+  factory TransResult.fromJson(Map<String, dynamic> json) {
+    if (json.containsKey('trans_result')) {
+      return TransResult(
+        from: json['from'],
+        to: json['to'],
+        translations: List<Translation>.from(
+            json['trans_result'].map((t) => Translation.fromJson(t))),
+        error_msg: "",
+      );
+    } else {
+      return TransResult(
+        from: "",
+        to: "",
+        translations: [],
+        error_msg: "出错了！" + json['error_msg'],
+      );
+    }
+  }
+}
+
+class Translation {
+  String src;
+  String dst;
+
+  Translation({required this.src, required this.dst});
+
+  factory Translation.fromJson(Map<String, dynamic> json) {
+    return Translation(
+      src: json['src'],
+      dst: json['dst'],
+    );
+  }
+}
+
+class ConfigReader {
+  Future<Map<String, dynamic>> loadConfig() async {
+    final String configString = await rootBundle.loadString('conf.json');
+    final Map<String, dynamic> config = json.decode(configString);
+    return config;
+  }
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  String _inputText = "";
+  final TextEditingController _textEditingController = TextEditingController();
+  String _apiId = "";
+  String _apiKey = "";
+  final ConfigReader _configReader = ConfigReader();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    var config = await _configReader.loadConfig();
+    _apiId = config['baiduAppid'];
+    _apiKey = config['baiduKey'];
+    //setState(() {}); // 触发widget重新构建
+  }
+
+  void _onBtnHit() {
     setState(() {
       // This call to setState tells the Flutter framework that something has
       // changed in this State, which causes it to rerun the build method below
       // so that the display can reflect the updated values. If we changed
       // _counter without calling setState(), then the build method would not be
       // called again, and so nothing would appear to happen.
-      _counter++;
+      _inputText = _textEditingController.text;
+      futureTransResult = translate(_inputText);
     });
   }
+
+  bool containsChinese(String input) {
+    // 使用正则表达式匹配中文字符
+    RegExp chineseRegExp = RegExp(r'[\u4e00-\u9fa5]');
+    return chineseRegExp.hasMatch(input);
+  }
+
+  Future<TransResult> translate(String inputText) async {
+    final String salt = DateTime.now().millisecondsSinceEpoch.toString();
+    const String baseUrl =
+        'https://fanyi-api.baidu.com/api/trans/vip/translate';
+    String q = inputText.trim();
+    if (q.isEmpty) {
+      q = '这还用翻译，都说了...惊喜嘛。';
+    }
+    bool zhToEn = containsChinese(q);
+    const String from = 'auto';
+    final String to = zhToEn ? 'en' : 'zh';
+    final String sign = getSign(salt, q);
+    final Uri uri = Uri.parse(
+        '$baseUrl?q=$q&from=$from&to=$to&appid=$_apiId&salt=$salt&sign=$sign');
+
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      // If the server did return a 200 OK response,
+      // then parse the JSON.Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+      print("Translation: ${response.body}");
+      return TransResult.fromJson(jsonDecode(response.body));
+    } else {
+      // If the server did not return a 200 OK response,
+      // then throw an exception.
+      print("Request failed with status: ${response.statusCode}");
+      throw Exception('Failed to translate');
+    }
+  }
+
+  //生成签名
+  String getSign(String saltTime, String input) {
+    var salt = saltTime;
+    var query = input;
+    var str1 = _apiId + query + salt + _apiKey;
+    var content = const Utf8Encoder().convert(str1);
+    var sign = md5.convert(content).toString();
+    return sign;
+  }
+
+  late Future<TransResult> futureTransResult = Future.value(
+      TransResult(from: "", to: "", translations: [], error_msg: ""));
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -102,18 +230,13 @@ class _MyHomePageState extends State<MyHomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     TextFormField(
+                      controller: _textEditingController,
                       decoration: const InputDecoration(
                         hintText: '什么叫他喵的惊喜？',
                       ),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 60),
                       autofocus: true,
-                      validator: (String? value) {
-                        if (value == null || value.isEmpty) {
-                          return '这还用翻译，都说了...惊喜嘛。';
-                        }
-                        return null;
-                      },
                     ),
                   ],
                 ),
@@ -121,17 +244,32 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             Expanded(
               flex: 3,
-              child: Text(
-                '$_counter',
-                style: Theme.of(context).textTheme.headlineMedium,
+              child: FutureBuilder<TransResult>(
+                future: futureTransResult,
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    if (snapshot.data!.translations.isEmpty) {
+                      return Text(snapshot.data!.error_msg);
+                    } else {
+                      return Text(
+                        snapshot.data!.translations[0].dst,
+                        style: const TextStyle(fontSize: 40),
+                      );
+                    }
+                  } else if (snapshot.hasError) {
+                    return Text('${snapshot.error}');
+                  }
+                  // By default, show a loading spinner.
+                  return const CircularProgressIndicator();
+                },
               ),
             ),
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
+        onPressed: _onBtnHit,
+        tooltip: '翻译',
         child: const Icon(Icons.edit_sharp),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
