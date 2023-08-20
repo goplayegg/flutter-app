@@ -93,7 +93,7 @@ class Translation {
 
 class ConfigReader {
   Future<Map<String, dynamic>> loadConfig() async {
-    final String configString = await rootBundle.loadString('conf.json');
+    final String configString = await rootBundle.loadString('assets/conf.json');
     final Map<String, dynamic> config = json.decode(configString);
     return config;
   }
