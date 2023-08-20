@@ -28,6 +28,7 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEY_PROPERTIES: ${{ secrets.KEY_PROPERTIES }}
+          BAIDU_KEY_BASE64: ${{ secrets.BAIDU_KEY_BASE64 }}
         run: |
           # import keystore from secrets
           ls -all
