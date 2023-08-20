@@ -42,3 +42,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+.vscode/launch.json
+android/app/test.txt
+android/test.txt
+assets/conf.json
+assets/test.txt
